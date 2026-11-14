@@ -281,6 +281,7 @@ def apns_send_message(
 	category: Optional[str] = None,
 	err_func: Optional[ErrFunc] = None,
 	interruption_level: Optional[InterruptionLevelType] = None,
+	using: Optional[str] = None,
 ) -> Dict[str, List[Union[str, Dict[str, str]]]]:
 	"""
 	Sends an APNS notification to a single registration_id.
@@ -327,6 +328,7 @@ def apns_send_message(
 		category=category,
 		interruption_level=interruption_level,
 		err_func=err_func,
+		using=using,
 	)
 
 	result = bulk_result.result_for(registration_id)
@@ -354,6 +356,7 @@ def apns_send_bulk_message(
 	category: Optional[str] = None,
 	err_func: Optional[ErrFunc] = None,
 	interruption_level: Optional[InterruptionLevelType] = None,
+	using: Optional[str] = None,
 ) -> BulkNotificationResult:
 	"""
 	Sends an APNS notification to one or more registration_ids.
@@ -433,7 +436,10 @@ def apns_send_bulk_message(
 				inactive_tokens.append(registration_id)
 
 		if len(inactive_tokens) > 0:
-			models.APNSDevice.objects.filter(
+			manager = models.APNSDevice.objects
+			if using:
+				manager = manager.using(using)
+			manager.filter(
 				registration_id__in=inactive_tokens
 			).update(active=False)
 
