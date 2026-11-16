@@ -148,6 +148,40 @@ class GCMModelTestCase(TestCase):
 			self.assertEqual(message.android.collapse_key, "test_key")
 			self.assertFalse(message.data)
 
+	def _assert_dry_run_send(self, send_each, tokens):
+		self.assertEqual(len(send_each.mock_calls), 1)
+		args, kwargs = send_each.call_args
+		self.assertTrue(kwargs["dry_run"])
+		self.assertEqual([m.token for m in args[0]], tokens)
+		for message in args[0]:
+			self.assertEqual(message.android.notification.body, "Hello world")
+			self.assertFalse(message.data)
+
+	def test_fcm_send_message_dry_run(self):
+		device = GCMDevice.objects.create(registration_id="abc", cloud_message_type="FCM")
+		with mock.patch(
+			"firebase_admin.messaging.send_each", return_value=responses.FCM_SUCCESS
+		) as p:
+			device.send_message("Hello world", dry_run=True)
+			self._assert_dry_run_send(p, ["abc"])
+
+	def test_fcm_send_message_dry_run_in_extra(self):
+		device = GCMDevice.objects.create(registration_id="abc", cloud_message_type="FCM")
+		with mock.patch(
+			"firebase_admin.messaging.send_each", return_value=responses.FCM_SUCCESS
+		) as p:
+			device.send_message("Hello world", extra={"dry_run": True})
+			self._assert_dry_run_send(p, ["abc"])
+
+	def test_fcm_send_bulk_message_dry_run(self):
+		self._create_fcm_devices(["abc", "abc1"])
+		with mock.patch(
+			"firebase_admin.messaging.send_each",
+			return_value=responses.FCM_SUCCESS_MULTIPLE,
+		) as p:
+			GCMDevice.objects.all().send_message("Hello world", dry_run=True)
+			self._assert_dry_run_send(p, ["abc", "abc1"])
+
 	def test_fcm_send_message_extra_notification(self):
 		device = GCMDevice.objects.create(registration_id="abc", cloud_message_type="FCM")
 		with mock.patch(

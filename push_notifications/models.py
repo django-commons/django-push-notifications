@@ -51,6 +51,24 @@ class Device(models.Model):
 		)
 
 
+def _legacy_to_fcm_message(message: Any, kwargs: Dict[str, Any]) -> Any:
+	"""
+	Builds a messaging.Message from a legacy message string and ``extra`` dict.
+
+	``dry_run`` (as a keyword argument or in ``extra``) is left in ``kwargs`` so
+	that it reaches ``send_each``, which validates the message without sending it.
+	"""
+	from .gcm import dict_to_fcm_message
+
+	data: Dict[str, Any] = dict(kwargs.pop("extra", None) or {})
+	if message is not None:
+		data["message"] = message
+	if data.pop("dry_run", False):
+		kwargs["dry_run"] = True
+	options = {key: value for key, value in kwargs.items() if key != "dry_run"}
+	return dict_to_fcm_message(data, **options)
+
+
 class GCMDeviceManager(models.Manager):
 	def get_queryset(self) -> "GCMDeviceQuerySet":
 		return GCMDeviceQuerySet(self.model, using=self._db, hints=self._hints)
@@ -59,15 +77,12 @@ class GCMDeviceManager(models.Manager):
 class GCMDeviceQuerySet(models.query.QuerySet):
 	def send_message(self, message: Any, **kwargs: Any) -> Any:
 		if self.exists():
-			from .gcm import dict_to_fcm_message, messaging
+			from .gcm import messaging
 			from .gcm import send_message as fcm_send_message
 
 			if not isinstance(message, messaging.Message):
-				data = kwargs.pop("extra", {})
-				if message is not None:
-					data["message"] = message
 				# transform legacy data to new message object
-				message = dict_to_fcm_message(data, **kwargs)
+				message = _legacy_to_fcm_message(message, kwargs)
 
 			app_ids = list(self.filter(active=True).order_by(
 				"application_id"
@@ -108,7 +123,7 @@ class GCMDevice(Device):
 		verbose_name = _("FCM device")
 
 	def send_message(self, message: Any, **kwargs: Any) -> Optional[Any]:
-		from .gcm import dict_to_fcm_message, messaging
+		from .gcm import messaging
 		from .gcm import send_message as fcm_send_message
 
 		# GCM is not supported.
@@ -116,11 +131,8 @@ class GCMDevice(Device):
 			return
 
 		if not isinstance(message, messaging.Message):
-			data: Dict[str, Any] = kwargs.pop("extra", {})
-			if message is not None:
-				data["message"] = message
 			# transform legacy data to new message object
-			message = dict_to_fcm_message(data, **kwargs)
+			message = _legacy_to_fcm_message(message, kwargs)
 
 		return fcm_send_message(
 			self.registration_id, message,
