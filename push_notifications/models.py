@@ -208,7 +208,9 @@ class WNSDeviceQuerySet(models.query.QuerySet):
 			reg_ids = list(self.filter(active=True, application_id=app_id).values_list(
 				"registration_id", flat=True
 			))
-			r = wns_send_bulk_message(uri_list=reg_ids, message=message, **kwargs)
+			r = wns_send_bulk_message(
+				uri_list=reg_ids, message=message, application_id=app_id, **kwargs
+			)
 			if hasattr(r, "keys"):
 				res += [r]
 			elif hasattr(r, "__getitem__"):
