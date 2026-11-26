@@ -145,3 +145,48 @@ class APNSModelTestCase(TestCase):
 			self.assertEqual(ae.exception.status, "Unregistered")
 			for device in APNSDevice.objects.filter(registration_id="abc"):
 				self.assertFalse(device.active)
+
+
+class MultiDatabaseAPNSDeactivationTestCase(TestCase):
+	databases = "__all__"
+
+	def test_apns_single_device_deactivation_respects_database(self):
+		APNSDevice.objects.using("default").create(
+			registration_id="sync_apns_tok1", active=True
+		)
+		other_device = APNSDevice.objects.using("other").create(
+			registration_id="sync_apns_tok1", active=True
+		)
+
+		with mock.patch("push_notifications.apns._apns_send") as s:
+			s.side_effect = Unregistered
+			with self.assertRaises(APNSError):
+				other_device.send_message("Hello World!")
+
+		self.assertTrue(
+			APNSDevice.objects.using("default").get(registration_id="sync_apns_tok1").active
+		)
+		self.assertFalse(
+			APNSDevice.objects.using("other").get(registration_id="sync_apns_tok1").active
+		)
+
+	def test_apns_bulk_device_deactivation_respects_database(self):
+		APNSDevice.objects.using("default").create(
+			registration_id="sync_apns_tok2", active=True
+		)
+		APNSDevice.objects.using("other").create(
+			registration_id="sync_apns_tok2", active=True
+		)
+
+		with mock.patch("push_notifications.apns._apns_send") as s:
+			s.return_value = {"sync_apns_tok2": "Unregistered"}
+			APNSDevice.objects.using("other").filter(
+				registration_id="sync_apns_tok2"
+			).send_message("Hello World!")
+
+		self.assertTrue(
+			APNSDevice.objects.using("default").get(registration_id="sync_apns_tok2").active
+		)
+		self.assertFalse(
+			APNSDevice.objects.using("other").get(registration_id="sync_apns_tok2").active
+		)

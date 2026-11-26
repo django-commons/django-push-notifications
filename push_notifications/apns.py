@@ -149,6 +149,7 @@ def apns_send_message(
 	application_id: Optional[str] = None,
 	creds: Optional[apns2_credentials.Credentials] = None,
 	interruption_level: Optional[InterruptionLevelType] = None,
+	using: Optional[str] = None,
 	**kwargs: Any
 ) -> None:
 	"""
@@ -169,7 +170,10 @@ def apns_send_message(
 		)
 	except apns2_errors.APNsException as apns2_exception:
 		if isinstance(apns2_exception, apns2_errors.Unregistered):
-			models.APNSDevice.objects.filter(registration_id=registration_id).update(active=False)
+			manager = models.APNSDevice.objects
+			if using:
+				manager = manager.using(using)
+			manager.filter(registration_id=registration_id).update(active=False)
 
 		raise APNSServerError(status=apns2_exception.__class__.__name__)
 
@@ -180,6 +184,7 @@ def apns_send_bulk_message(
 	application_id: Optional[str] = None,
 	creds: Optional[apns2_credentials.Credentials] = None,
 	interruption_level: Optional[InterruptionLevelType] = None,
+	using: Optional[str] = None,
 	**kwargs: Any
 ) -> Optional[Dict[str, str]]:
 	"""
@@ -196,5 +201,8 @@ def apns_send_bulk_message(
 		creds=creds, interruption_level=interruption_level, **kwargs
 	)
 	inactive_tokens = [token for token, result in results.items() if result == "Unregistered"]
-	models.APNSDevice.objects.filter(registration_id__in=inactive_tokens).update(active=False)
+	manager = models.APNSDevice.objects
+	if using:
+		manager = manager.using(using)
+	manager.filter(registration_id__in=inactive_tokens).update(active=False)
 	return results

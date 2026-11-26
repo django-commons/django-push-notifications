@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, router
 from django.utils.translation import gettext_lazy as _
 from typing import List, Optional, Dict, Any
 from .fields import HexIntegerField
@@ -73,6 +73,8 @@ class GCMDeviceQuerySet(models.query.QuerySet):
 				"application_id"
 			).values_list("application_id", flat=True).distinct())
 
+			kwargs.setdefault("using", self._db)
+
 			responses = []
 			for app_id in app_ids:
 				reg_ids = list(
@@ -122,6 +124,8 @@ class GCMDevice(Device):
 			# transform legacy data to new message object
 			message = dict_to_fcm_message(data, **kwargs)
 
+		kwargs.setdefault("using", self._state.db or router.db_for_write(type(self), instance=self))
+
 		return fcm_send_message(
 			self.registration_id, message,
 			application_id=self.application_id, **kwargs
@@ -142,6 +146,7 @@ class APNSDeviceQuerySet(models.query.QuerySet):
 
 			app_ids = self.filter(active=True).order_by("application_id") \
 				.values_list("application_id", flat=True).distinct()
+			kwargs.setdefault("using", self._db)
 			res = []
 			for app_id in app_ids:
 				reg_ids = list(self.filter(active=True, application_id=app_id).values_list(
@@ -182,6 +187,8 @@ class APNSDevice(Device):
 			from .apns_async import apns_send_message
 		except ImportError:
 			from .apns import apns_send_message
+
+		kwargs.setdefault("using", self._state.db or router.db_for_write(type(self), instance=self))
 
 		return apns_send_message(
 			registration_id=self.registration_id,
