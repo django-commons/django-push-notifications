@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 
 from django.test import TestCase
 
+from push_notifications.models import WNSDevice
 from push_notifications.wns import (
 	dict_to_xml_schema, wns_send_bulk_message, wns_send_message
 )
@@ -55,6 +56,22 @@ class WNSSendBulkMessageTestCase(TestCase):
 		wns_send_bulk_message(uri_list=["one", ], message="test message")
 		mock_method.assert_called_with(
 			application_id=None, message="test message", raw_data=None, uri="one", xml_data=None
+		)
+
+
+class WNSDeviceQuerySetTestCase(TestCase):
+	@mock.patch("push_notifications.wns._wns_prepare_toast", return_value="toast")
+	@mock.patch("push_notifications.wns._wns_send")
+	def test_send_message_uses_each_device_application_id(self, mock_send, _):
+		WNSDevice.objects.create(registration_id="uri-a", application_id="app_a")
+		WNSDevice.objects.create(registration_id="uri-b", application_id="app_b")
+
+		WNSDevice.objects.all().send_message("test message")
+
+		self.assertEqual(mock_send.call_count, 2)
+		self.assertEqual(
+			sorted((c[1]["uri"], c[1]["application_id"]) for c in mock_send.call_args_list),
+			[("uri-a", "app_a"), ("uri-b", "app_b")],
 		)
 
 
